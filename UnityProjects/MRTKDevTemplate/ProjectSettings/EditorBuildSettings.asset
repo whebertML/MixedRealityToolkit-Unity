@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Scenes/HandInteractionExamples.unity
+    guid: 1300a9dceb058844b865199dcd557fc7
+  - enabled: 1
     path: Assets/Scenes/BoundsControlExamples.unity
     guid: 384e6c80fec551842a329aa6fdb67c00
   - enabled: 1
@@ -47,9 +50,6 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/FontIconExample.unity
     guid: a3ce810af8da0ff438d98e8ebac2f69c
-  - enabled: 1
-    path: Assets/Scenes/HandInteractionExamples.unity
-    guid: 1300a9dceb058844b865199dcd557fc7
   - enabled: 1
     path: Assets/Scenes/HandMenuExamples.unity
     guid: 160f5fe1138c53249862f20e854a6edd
