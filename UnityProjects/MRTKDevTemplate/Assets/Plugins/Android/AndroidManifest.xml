@@ -14,5 +14,8 @@
             <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
         </activity>
     </application>
-	<uses-feature android:name="oculus.software.overlay_keyboard" android:required="false"/>
+    <uses-feature android:name="oculus.software.overlay_keyboard" android:required="false"/>
+    <uses-permission android:name="com.magicleap.permission.HAND_TRACKING" />
+    <uses-permission android:name="com.magicleap.permission.EYE_TRACKING" />
+    <uses-permission android:name="com.magicleap.permission.SPATIAL_MAPPING" />
 </manifest>
