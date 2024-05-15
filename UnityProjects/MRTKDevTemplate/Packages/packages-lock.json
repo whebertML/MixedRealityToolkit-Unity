@@ -168,7 +168,7 @@
     },
     "com.unity.inputsystem": {
       "version": "1.6.3",
-      "depth": 2,
+      "depth": 1,
       "source": "registry",
       "dependencies": {
         "com.unity.modules.uielements": "1.0.0"
@@ -350,7 +350,7 @@
     },
     "com.unity.xr.management": {
       "version": "4.4.0",
-      "depth": 2,
+      "depth": 1,
       "source": "registry",
       "dependencies": {
         "com.unity.modules.subsystems": "1.0.0",
@@ -361,8 +361,8 @@
       "url": "https://packages.unity.com"
     },
     "com.unity.xr.openxr": {
-      "version": "1.10.0",
-      "depth": 1,
+      "version": "1.11.0",
+      "depth": 0,
       "source": "registry",
       "dependencies": {
         "com.unity.xr.management": "4.4.0",
