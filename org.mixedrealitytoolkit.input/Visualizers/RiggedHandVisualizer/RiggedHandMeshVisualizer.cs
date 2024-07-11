@@ -22,7 +22,7 @@ namespace MixedReality.Toolkit.Input
     /// can be more distracting than it's worth. However, for opaque platforms, this is a great solution.
     /// </remarks>
     [AddComponentMenu("MRTK/Input/Visualizers/Rigged Hand Mesh Visualizer")]
-    public class RiggedHandMeshVisualizer : MonoBehaviour
+    public class RiggedHandMeshVisualizer : MonoBehaviour, ISelectInputVisualizer
     {
         [SerializeField]
         [Tooltip("The XRNode on which this hand is located.")]
@@ -66,6 +66,8 @@ namespace MixedReality.Toolkit.Input
         [Tooltip("The input reader used when pinch selecting an interactable.")]
         XRInputButtonReader selectInput = new XRInputButtonReader("Select");
 
+        #region ISelectInputVisualizer implementation
+
         /// <summary>
         /// Input reader used when pinch selecting an interactable.
         /// </summary>
@@ -74,6 +76,8 @@ namespace MixedReality.Toolkit.Input
             get => selectInput;
             set => SetInputProperty(ref selectInput, value);
         }
+
+        #endregion ISelectInputVisualizer implementation
 
         // Automatically calculated over time, based on the accumulated error
         // between the user's actual joint locations and the armature's bones/joints.
