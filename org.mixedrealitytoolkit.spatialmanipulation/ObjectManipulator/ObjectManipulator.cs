@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using Unity.Profiling;
+using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
@@ -705,6 +706,37 @@ namespace MixedReality.Toolkit.SpatialManipulation
         /// <returns>The Transform that should be used to define the reference frame or null to use the global reference frame</returns>
         protected virtual Transform GetReferenceFrameTransform(SelectEnterEventArgs args) => null;
 
+        bool socketHoverSnapping = false;
+        XRSocketInteractor currentSnapSocket = null;
+        readonly HashSet<XRSocketInteractor> hoveringSocketInteractors = new();
+        Vector3 currentHoverSnapScale = Vector3.one;
+        Vector3 initialScaleBeforeHoverSnap = Vector3.one;
+
+        /// <inheritdoc/>
+        protected override void OnHoverEntered(HoverEnterEventArgs args)
+        {
+            base.OnHoverEntered(args);
+
+            // XRSocketInteractor hover snapping support
+            if (args.interactorObject is XRSocketInteractor socketInteractor &&
+                socketInteractor.hoverSocketSnapping)
+            {
+                hoveringSocketInteractors.Add(socketInteractor);
+            }
+        }
+
+        /// <inheritdoc />
+        protected override void OnHoverExited(HoverExitEventArgs args)
+        {
+            base.OnHoverExited(args);
+
+            // XRSocketInteractor hover snapping support
+            if (args.interactorObject is XRSocketInteractor socketInteractor)
+            {
+                hoveringSocketInteractors.Remove(socketInteractor);
+            }
+        }
+
         /// <inheritdoc />
         protected override void OnSelectEntered(SelectEnterEventArgs args)
         {
@@ -726,6 +758,8 @@ namespace MixedReality.Toolkit.SpatialManipulation
                     UpdateCurrentRigidbodyMovementType();
                     SetupRigidbodyManipulation();
                 }
+
+                Debug.Log($"WCH: selecting entering with {args.interactorObject.transform.name}, scale = {HostTransform.localScale}");
 
                 targetTransform = new MixedRealityTransform(HostTransform.position, HostTransform.rotation, HostTransform.localScale);
 
@@ -777,6 +811,77 @@ namespace MixedReality.Toolkit.SpatialManipulation
 
         private static readonly ProfilerMarker ObjectManipulatorProcessInteractableMarker =
             new ProfilerMarker("[MRTK] ObjectManipulator.ProcessInteractable");
+
+        protected Vector3 CalculateHoverSnapScale(XRSocketInteractor socketInteractor)
+        {
+            Vector3 scale = Vector3.one;
+
+            switch (socketInteractor.socketScaleMode)
+            {
+                case SocketScaleMode.None:
+                    scale = targetTransform.Scale;
+                    break;
+                case SocketScaleMode.Fixed:
+                    scale = Vector3.Scale(targetTransform.Scale, socketInteractor.fixedScale);
+                    break;
+                case SocketScaleMode.StretchedToFitSize:
+                    if (BoundsExtensions.GetRenderBounds(HostTransform.gameObject, out Bounds bounds, 0))
+                    {
+                        Bounds socketBounds = new Bounds(socketInteractor.attachTransform.position, socketInteractor.targetBoundsSize);
+                        scale = targetTransform.Scale * BoundsExtensions.GetScaleToFitInside(bounds, socketBounds);
+                    }
+                    else
+                    {
+                        scale = targetTransform.Scale;
+                    }
+                    break;
+            }
+
+            return scale;
+        }
+
+        protected void ProcessHoverSocketSnapping()
+        {
+            // XRSocketInteractors only interact with Interactables that have rigid bodies.
+            if (rigidBody != null)
+            {
+                bool wasSocketHoverSnapping = socketHoverSnapping;
+                XRSocketInteractor currentSocketInteractor = null;
+                socketHoverSnapping = false;
+                float minSqDistance = float.MaxValue;
+
+                foreach (XRSocketInteractor socketInteractor in hoveringSocketInteractors)
+                {
+                    float socketSnappingRadius = socketInteractor.socketSnappingRadius;
+                    float socketHoverSnapSqDistance = socketSnappingRadius * socketSnappingRadius;
+                    float sqDistance = Vector3.SqrMagnitude(socketInteractor.attachTransform.position - targetTransform.Position);
+                    if (sqDistance < socketHoverSnapSqDistance && sqDistance < minSqDistance)
+                    {
+                        minSqDistance = sqDistance;
+                        socketHoverSnapping = true;
+                        currentSocketInteractor = socketInteractor;
+                    }
+                }
+
+                if (socketHoverSnapping)
+                {
+                    targetTransform.Position = currentSocketInteractor.attachTransform.position;
+                    targetTransform.Rotation = currentSocketInteractor.attachTransform.rotation;
+                    if (currentSocketInteractor != currentSnapSocket)
+                    {
+                        currentSnapSocket = currentSocketInteractor;
+                        currentHoverSnapScale = CalculateHoverSnapScale(currentSnapSocket);
+                    }
+                    targetTransform.Scale = currentHoverSnapScale;
+                }
+
+                if (wasSocketHoverSnapping != socketHoverSnapping)
+                {
+                    UpdateCurrentRigidbodyMovementType();
+                    SetupRigidbodyManipulation();
+                }
+            }
+        }
 
         ///<inheritdoc />
         public override void ProcessInteractable(XRInteractionUpdateOrder.UpdatePhase updatePhase)
@@ -841,6 +946,11 @@ namespace MixedReality.Toolkit.SpatialManipulation
                     if (EnableConstraints && constraintsManager != null)
                     {
                         constraintsManager.ApplyTranslationConstraints(ref targetTransform, isOneHanded, IsGrabSelected);
+                    }
+
+                    if (!SelectedBySocket && (socketHoverSnapping || hoveringSocketInteractors.Count > 0))
+                    {
+                        ProcessHoverSocketSnapping();
                     }
 
                     ApplyTargetTransform();
@@ -989,7 +1099,7 @@ namespace MixedReality.Toolkit.SpatialManipulation
         {
             // TODO: Elastics. Compute elastics here and apply to modifiedTransformFlags.
 
-            bool applySmoothing = ShouldSmooth && smoothingLogic != null && !SelectedBySocket;
+            bool applySmoothing = ShouldSmooth && smoothingLogic != null && !SelectedBySocket && !socketHoverSnapping;
 
             targetPose.Position = (applySmoothing && !UseForces) ? smoothingLogic.SmoothPosition(HostTransform.position, targetPose.Position, moveLerpTime, Time.deltaTime) : targetPose.Position;
             targetPose.Rotation = (applySmoothing && !UseForces) ? smoothingLogic.SmoothRotation(HostTransform.rotation, targetPose.Rotation, rotateLerpTime, Time.deltaTime) : targetPose.Rotation;
@@ -1000,15 +1110,22 @@ namespace MixedReality.Toolkit.SpatialManipulation
         {
             CurrentRigidbodyMovementType = rigidbodyMovementType;
 
-            // Find the most recent interactor that has a movement type override, if any, using reverse order of selecting interactors.
-            // This matches XRI's treatment of overrides as the default behavior.
-            for (var index = interactorsSelecting.Count - 1; index >= 0; --index)
+            if (socketHoverSnapping)
             {
-                var xrBaseInteractor = interactorsSelecting[index] as XRBaseInteractor;
-                if (xrBaseInteractor != null && xrBaseInteractor.selectedInteractableMovementTypeOverride.HasValue)
+                CurrentRigidbodyMovementType = MovementType.Instantaneous;
+            }
+            else
+            {
+                // Find the most recent interactor that has a movement type override, if any, using reverse order of selecting interactors.
+                // This matches XRI's treatment of overrides as the default behavior.
+                for (var index = interactorsSelecting.Count - 1; index >= 0; --index)
                 {
-                    CurrentRigidbodyMovementType = xrBaseInteractor.selectedInteractableMovementTypeOverride.Value;
-                    break;
+                    var xrBaseInteractor = interactorsSelecting[index] as XRBaseInteractor;
+                    if (xrBaseInteractor != null && xrBaseInteractor.selectedInteractableMovementTypeOverride.HasValue)
+                    {
+                        CurrentRigidbodyMovementType = xrBaseInteractor.selectedInteractableMovementTypeOverride.Value;
+                        break;
+                    }
                 }
             }
         }
